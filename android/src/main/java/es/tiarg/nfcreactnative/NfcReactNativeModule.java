@@ -152,7 +152,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
                             reactContext
                                     .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                    .emit("onTagDetected", error);
+                                    .emit("onTagError", error);
 
                             writeOperation = false;
                             readOperation = false;
