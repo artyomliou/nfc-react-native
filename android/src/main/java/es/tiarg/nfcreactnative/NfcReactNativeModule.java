@@ -199,7 +199,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         this.reactContext.addLifecycleEventListener(this);
 
         ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
-        exec.scheduleAtFixedRate(new ThreadLectura(), 0, 1, TimeUnit.SECONDS);
+        exec.scheduleAtFixedRate(new ThreadLectura(), 0, 500, TimeUnit.MILLISECONDS);
 
         this.idOperation = false;
         this.readOperation = false;
