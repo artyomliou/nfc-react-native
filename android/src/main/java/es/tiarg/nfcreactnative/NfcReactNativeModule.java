@@ -267,6 +267,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     public void readTag(ReadableArray sectores) {
         this.sectores = sectores;
         this.readOperation = true;
+        this.writeOperation = false;
     }
 
     @ReactMethod
@@ -275,6 +276,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         this.tagId = tagId;
         this.sectores = sectores;
         this.writeOperation = true;
+        this.readOperation = false;
     }
 
     @ReactMethod
