@@ -85,8 +85,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     WritableArray readDataSectors = Arguments.createArray();
                     readData.putInt("tagId", id);
 
-                    for (int i = 0; i < sectores.size(); i++)
-                    {
+                    for (int i = 0; i < sectores.size(); i++) {
                         boolean authResult;
                         if (sectores.getMap(i).getString("keyType").equals("A")) {
                             authResult = tag.authenticateSectorWithKeyA(sectores.getMap(i).getInt("sector"), hexStringToByteArray(sectores.getMap(i).getString("clave")));
@@ -106,7 +105,20 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                             tag.close();
                             return;
                         }
-                        
+                        if (!authResult) {
+                            WritableMap error = Arguments.createMap();
+                            error.putString("error", "Auth error");
+
+                            reactContext
+                                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                                    .emit("onTagError", error);
+
+                            writeOperation = false;
+                            readOperation = false;
+                            tag.close();
+                            return;
+                        }
+
                         if (authResult) {
                             WritableMap dataSector = Arguments.createMap();
                             WritableArray blocksXSector = Arguments.createArray();
@@ -145,19 +157,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                                 dataSector.putInt("sector", sectores.getMap(i).getInt("sector"));
                                 writeData.pushMap(dataSector);
                             }
-                        }
-                        else {
-                            WritableMap error = Arguments.createMap();
-                            error.putString("error", "Auth error");
-
-                            reactContext
-                                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                    .emit("onTagError", error);
-
-                            writeOperation = false;
-                            readOperation = false;
-                            tag.close();
-                            return;
                         }
                     }
                     tag.close();
