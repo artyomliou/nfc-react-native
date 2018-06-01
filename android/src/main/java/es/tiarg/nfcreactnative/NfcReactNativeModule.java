@@ -30,6 +30,7 @@ import java.io.StringWriter;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
+import java.util.ArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -49,6 +50,10 @@ import static com.facebook.common.util.Hex.hexStringToByteArray;
 class NfcReactNativeModule extends ReactContextBaseJavaModule implements ActivityEventListener, LifecycleEventListener {
     private ReactApplicationContext reactContext;
 
+    private ArrayList<String> keys;
+    private ArrayList<String> types;
+    private ArrayList<String> authStatuses;
+
     private boolean readOperation;
     private boolean writeOperation;
     private int tagId;
@@ -57,119 +62,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     private NfcAdapter mNfcAdapter;
     private MifareClassic tag;
 
-
-    private class ThreadLectura implements Runnable {
-        public void run() {
-            if (tag != null && (readOperation || writeOperation)) {
-                try {
-                    tag.connect();
-
-                    WritableMap readData = Arguments.createMap();
-                    WritableArray writeData = Arguments.createArray();
-                    WritableArray readDataSectors = Arguments.createArray();
-                    readData.putInt("tagId", id);
-
-                    for (int i = 0; i < sectores.size(); i++) {
-                        ReadableMap sector = sectores.getMap(i);
-                        int sectorIndex = sector.getInt("sector");
-                        byte[] claveBytes = hexStringToByteArray(sector.getString("clave"));
-                        boolean authResult;
-
-                        if (sector.getString("keyType").equals("A")) {
-                            authResult = tag.authenticateSectorWithKeyA(sectorIndex, claveBytes);
-                        } else {
-                            authResult = tag.authenticateSectorWithKeyB(sectorIndex, claveBytes);
-                        }
-
-                        if (!authResult) {
-                            writeOperation = false;
-                            readOperation = false;
-                            throw new Exception("Auth Error: failed at sector " + sectorIndex);
-                        }
-                    }
-
-                    for (int i = 0; i < sectores.size(); i++) {
-                        // if (tagId != 0 && writeOperation && tagId != id) {
-                        //     WritableMap error = Arguments.createMap();
-                        //     error.putString("error", "Tag id doesn't match");
-
-                        //     reactContext
-                        //             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                        //             .emit("onTagError", error);
-
-                        //     writeOperation = false;
-                        //     tag.close();
-                        //     return;
-                        // }
-
-
-                        WritableMap dataSector = Arguments.createMap();
-                        WritableArray blocksXSector = Arguments.createArray();
-                            
-                        if (readOperation) {
-                            for (int j = 0; j < sectores.getMap(i).getArray("blocks").size(); j++) 
-                            {
-                                int iBloque = sectores.getMap(i).getArray("blocks").getInt(j);
-                                byte[] blockData = tag.readBlock(4 * sectores.getMap(i).getInt("sector") + iBloque);
-                                blocksXSector.pushArray(Arguments.fromArray(arrayBytesToArrayInts(blockData)));
-                            }
-
-                            dataSector.putArray("blocks", blocksXSector);
-                            dataSector.putInt("sector", sectores.getMap(i).getInt("sector"));
-
-                            readDataSectors.pushMap(dataSector);
-                        }
-                            
-                        if (writeOperation) {
-                            for (int k = 0; k < sectores.getMap(i).getArray("blocks").size(); k++) {
-                                ReadableMap rmBloque = sectores.getMap(i).getArray("blocks").getMap(k);
-
-                                ReadableNativeArray data = (ReadableNativeArray)rmBloque.getArray("data");
-
-                                int[] writeDataA = new int[data.size()];
-                                for(int l = 0; l < data.size(); l++)
-                                        writeDataA[l] = data.getInt(l);
-
-                                int blockIndex = 4 * sectores.getMap(i).getInt("sector") + rmBloque.getInt("index");
-                                tag.writeBlock(blockIndex, arrayIntsToArrayBytes(writeDataA));
-
-                                blocksXSector.pushMap(Arguments.createMap());
-                            }
-                            dataSector.putArray("blocks", blocksXSector);
-                            dataSector.putInt("sector", sectores.getMap(i).getInt("sector"));
-                            writeData.pushMap(dataSector);
-                        }
-                    }
-                    tag.close();
-
-
-                    readData.putArray("lectura",readDataSectors);
-                    if (readOperation) {
-                        reactContext
-                                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                .emit("onTagRead", readData);
-                        readOperation = false;
-                    }
-
-                    if (writeOperation){
-                        reactContext
-                                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                .emit("onTagWrite", writeData);
-                        writeOperation = false;
-                    }
-
-                } catch (Exception ex) {
-                    WritableMap error = Arguments.createMap();
-                    error.putString("error", ex.toString());
-
-                    reactContext
-                            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                            .emit("onTagError", error);
-                }
-            }
-        }
-    }
-
     public NfcReactNativeModule(ReactApplicationContext reactContext) {
         super(reactContext);
         this.reactContext = reactContext;
@@ -177,9 +69,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
         this.reactContext.addActivityEventListener(this);
         this.reactContext.addLifecycleEventListener(this);
-
-        ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
-        exec.scheduleAtFixedRate(new ThreadLectura(), 0, 1, TimeUnit.SECONDS);
 
         this.readOperation = false;
         this.writeOperation = false;
@@ -205,12 +94,34 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         // Activity `onDestroy`
     }
 
+    @Override
+    public void onActivityResult(
+            final Activity activity,
+            final int requestCode,
+            final int resultCode,
+            final Intent intent) {
+    }
+
+    @Override
+    public void onNewIntent(Intent intent) {
+        handleIntent(intent);
+    }
+
     private void handleIntent(Intent intent) {
         this.tag = MifareClassic.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
         this.tagId = ByteBuffer.wrap(this.tag.getTag().getId()).getInt();
 
+        int length = this.tag.getSectorCount();
+        this.authStatuses = new ArrayList<Boolean>(length);
+        this.keys = new ArrayList<String>(length);
+        this.types = new ArrayList<String>(length);
+
         WritableMap map = Arguments.createMap();
         map.putInt("id", this.tagId);
+        map.putInt("size", this.tag.getSize());
+        map.putInt("timeout", this.tag.getTimeout());
+        map.putInt("type", this.tag.getType());
+
         reactContext
             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
             .emit("onTagDetected", map);
@@ -228,18 +139,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         adapter.disableForegroundDispatch(activity);
     }
 
-    @Override
-    public void onNewIntent(Intent intent) {
-        handleIntent(intent);
-    }
-
-    @Override
-    public void onActivityResult(
-            final Activity activity,
-            final int requestCode,
-            final int resultCode,
-            final Intent intent) {
-    }
     /**
      * @return the name of this module. This will be the name used to {@code require()} this module
      * from javascript.
@@ -247,6 +146,94 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     @Override
     public String getName() {
         return "NfcReactNative";
+    }
+
+    @ReactMethod
+    public void setKeys(ReadableArray keys, ReadableArray types) {
+        this.keys = (ArrayList<String>) keys.toArrayList();
+        this.types = (ArrayList<String>) types.toArrayList();
+    }
+
+    @ReactMethod
+    public void connect(Promise promise) {
+        WritableMap map = Arguments.createMap();
+        try {
+            if (tag == null) {
+                throw new Excpetion("Didnt detected any tag");
+            }
+            if (tag.isConnected() == true) {
+                throw new Excpetion("Connected with " + String.valueOf(this.tagId));
+            }
+
+            tag.connect();
+
+            map.putBoolean("status", true);
+            promise.resolve(map);
+
+        } catch (Excpetion e) {
+            map.putBoolean("status", false);
+            map.putString("message", e.getMessage());
+            promise.reject(map);
+        }
+    }
+
+    @ReactMethod
+    public void close(Promise promise) {
+        WritableMap map = Arguments.createMap();
+        try {
+            if (tag == null) {
+                throw new Excpetion("Didnt detected any tag");
+            }
+            if (tag.isConnected() == false) {
+                throw new Excpetion("Not connected");
+            }
+            
+            tag.close();
+
+            map.putBoolean("status", true);
+            promise.resolve(map);
+            
+        } catch (Excpetion e) {
+            map.putBoolean("status", false);
+            map.putString("message", e.getMessage());
+            promise.reject(map);
+        }
+    }
+
+    @ReactMethod
+    public void read(int sectorIndex, int blockIndex, Promise promise) {
+        WritableMap map = Arguments.createMap();
+        try {
+            auth(sectorIndex);
+            byte[] blockBytes = tag.readBlock(4 * sectorIndex + blockIndex);
+            String blockString = byteArrayToHexString(blockBytes);
+
+            map.putBoolean("status", true);
+            map.putString("payload", blockString);
+            promise.resolve(map);
+        } catch (Exception e) {
+            map.putBoolean("status", false);
+            map.putString("message", e.getMessage());
+            promise.reject(map);
+        }
+    }
+
+    @ReactMethod
+    public void write(int sectorIndex, int blockIndex, ReadableArray values, Promise promise) {
+        WritableMap map = Arguments.createMap();
+        try {
+            auth(sectorIndex);
+            ArrayList<Integer> valueList = (ArrayList<Integer>) values.toArrayList();
+            byte[] valueBytes = arrayIntsToArrayBytes(valueList.toArray());
+            tag.writeBlock(4 * sectorIndex + blockIndex, valueBytes);
+
+            map.putBoolean("status", true);
+            promise.resolve(map);
+        } catch (Exception e) {
+            map.putBoolean("status", false);
+            map.putString("message", e.getMessage());
+            promise.reject(map);
+        }
     }
 
     @ReactMethod
@@ -261,6 +248,20 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         this.sectores = sectores;
         this.writeOperation = true;
         this.readOperation = false;
+    }
+
+    private void auth(int sectorIndex) {
+        if (authStatuses.get(sectorIndex) == true) {
+            return;
+        }
+        byte[] keyBytes = keys.get(sectorIndex).getBytes();
+        boolean passed;
+        if (types.get(sectorIndex).equals("A")) {
+            passed = tag.authenticateSectorWithKeyA(sectorIndex, keyBytes);
+        } else {
+            passed = tag.authenticateSectorWithKeyB(sectorIndex, keyBytes);
+        }
+        authStatuses.set(sectorIndex, passed);
     }
 
     private static byte[] hexStringToByteArray(String s) {
