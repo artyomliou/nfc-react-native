@@ -25,6 +25,7 @@ import android.nfc.tech.Ndef;
 import android.os.Bundle;
 import android.util.Log;
 
+import java.lang.Exception;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.math.BigInteger;
@@ -50,9 +51,11 @@ import static com.facebook.common.util.Hex.hexStringToByteArray;
 class NfcReactNativeModule extends ReactContextBaseJavaModule implements ActivityEventListener, LifecycleEventListener {
     private ReactApplicationContext reactContext;
 
+    private static final String E_LAYOUT_ERROR = "E_LAYOUT_ERROR";
+
     private ArrayList<String> keys;
     private ArrayList<String> types;
-    private ArrayList<String> authStatuses;
+    private ArrayList<Boolean> authStatuses;
 
     private boolean readOperation;
     private boolean writeOperation;
@@ -150,8 +153,14 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
     @ReactMethod
     public void setKeys(ReadableArray keys, ReadableArray types) {
-        this.keys = (ArrayList<String>) keys.toArrayList();
-        this.types = (ArrayList<String>) types.toArrayList();
+        this.keys = new ArrayList<String>(keys.size());
+        for (int i = 0; i < keys.size(); i++) {
+            this.keys.set(i, keys.getInt(i));
+        }
+        this.types = new ArrayList<String>(types.size());
+        for (int i = 0; i < types.size(); i++) {
+            this.types.set(i, types.getInt(i));
+        }
     }
 
     @ReactMethod
@@ -171,9 +180,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             promise.resolve(map);
 
         } catch (Excpetion e) {
-            map.putBoolean("status", false);
-            map.putString("message", e.getMessage());
-            promise.reject(map);
+            promise.reject(E_LAYOUT_ERROR, e);
         }
     }
 
@@ -194,9 +201,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             promise.resolve(map);
             
         } catch (Excpetion e) {
-            map.putBoolean("status", false);
-            map.putString("message", e.getMessage());
-            promise.reject(map);
+            promise.reject(E_LAYOUT_ERROR, e);
         }
     }
 
@@ -212,9 +217,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             map.putString("payload", blockString);
             promise.resolve(map);
         } catch (Exception e) {
-            map.putBoolean("status", false);
-            map.putString("message", e.getMessage());
-            promise.reject(map);
+            promise.reject(E_LAYOUT_ERROR, e);
         }
     }
 
@@ -223,16 +226,18 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         WritableMap map = Arguments.createMap();
         try {
             auth(sectorIndex);
-            ArrayList<Integer> valueList = (ArrayList<Integer>) values.toArrayList();
+            ArrayList<Integer> valueList = new ArrayList<Integer>(values.size());
+            for (int i = 0; i < values.size(); i++) {
+                valueList.set(i, values.getInt(i));
+            }
+
             byte[] valueBytes = arrayIntsToArrayBytes(valueList.toArray());
             tag.writeBlock(4 * sectorIndex + blockIndex, valueBytes);
 
             map.putBoolean("status", true);
             promise.resolve(map);
         } catch (Exception e) {
-            map.putBoolean("status", false);
-            map.putString("message", e.getMessage());
-            promise.reject(map);
+            promise.reject(E_LAYOUT_ERROR, e);
         }
     }
 
