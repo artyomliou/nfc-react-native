@@ -70,8 +70,8 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     readData.putInt("tagId", id);
 
                     for (int i = 0; i < sectores.size(); i++) {
-                        Map sector = sectores.getMap(i);
-                        Int sectorIndex = sector.getInt("sector");
+                        ReadableMap sector = sectores.getMap(i);
+                        int sectorIndex = sector.getInt("sector");
                         Byte[] claveBytes = hexStringToByteArray(sector.getString("clave"));
                         boolean authResult;
 
@@ -207,7 +207,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
     private void handleIntent(Intent intent) {
         this.tag = MifareClassic.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
-        this.tagId = this.tag.getTag().getId().getInt();
+        this.tagId = ByteBuffer.wrap(bytes).getInt(this.tag.getTag().getId());
 
         WritableMap map = Arguments.createMap();
         map.putInt("id", this.tagId);
