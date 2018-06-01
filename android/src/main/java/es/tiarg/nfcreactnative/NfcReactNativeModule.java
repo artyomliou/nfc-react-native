@@ -207,7 +207,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
     private void handleIntent(Intent intent) {
         this.tag = MifareClassic.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
-        this.tagId = ByteBuffer.wrap(bytes).getInt(this.tag.getTag().getId());
+        this.tagId = ByteBuffer.wrap(this.tag.getTag().getId()).getInt();
 
         WritableMap map = Arguments.createMap();
         map.putInt("id", this.tagId);
