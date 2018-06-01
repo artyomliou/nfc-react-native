@@ -58,11 +58,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     private ArrayList<String> types;
     private ArrayList<Boolean> authStatuses;
 
-    private boolean readOperation;
-    private boolean writeOperation;
     private int tagId;
-
-    private ReadableArray sectores;
     private NfcAdapter mNfcAdapter;
     private MifareClassic tag;
 
@@ -73,9 +69,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
         this.reactContext.addActivityEventListener(this);
         this.reactContext.addLifecycleEventListener(this);
-
-        this.readOperation = false;
-        this.writeOperation = false;
     }
 
     @Override
@@ -240,20 +233,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         } catch (Exception e) {
             promise.reject(E_LAYOUT_ERROR, e);
         }
-    }
-
-    @ReactMethod
-    public void readTag(ReadableArray sectores) {
-        this.sectores = sectores;
-        this.readOperation = true;
-        this.writeOperation = false;
-    }
-
-    @ReactMethod
-    public void writeTag(ReadableArray sectores) {
-        this.sectores = sectores;
-        this.writeOperation = true;
-        this.readOperation = false;
     }
 
     private void auth(int sectorIndex) throws IOException {
