@@ -49,7 +49,6 @@ import static com.facebook.common.util.Hex.hexStringToByteArray;
 class NfcReactNativeModule extends ReactContextBaseJavaModule implements ActivityEventListener, LifecycleEventListener {
     private ReactApplicationContext reactContext;
 
-    private boolean idOperation;
     private boolean readOperation;
     private boolean writeOperation;
     private int tagId;
@@ -61,24 +60,9 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
     private class ThreadLectura implements Runnable {
         public void run() {
-            if (tag != null && (idOperation || readOperation || writeOperation)) {
+            if (tag != null && (readOperation || writeOperation)) {
                 try {
                     tag.connect();
-
-                    ByteBuffer bb = ByteBuffer.wrap(tag.getTag().getId());
-                    int id = bb.getInt();
-
-                    if (idOperation) {
-                        WritableMap idData = Arguments.createMap();
-                        idData.putInt("id", id);
-                        reactContext
-                                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                .emit("onTagDetected", idData);
-
-                        idOperation = false;
-                        tag.close();
-                        return;
-                    }
 
                     WritableMap readData = Arguments.createMap();
                     WritableArray writeData = Arguments.createArray();
@@ -200,7 +184,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
         exec.scheduleAtFixedRate(new ThreadLectura(), 0, 1, TimeUnit.SECONDS);
 
-        this.idOperation = false;
         this.readOperation = false;
         this.writeOperation = false;
     }
@@ -227,6 +210,13 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
     private void handleIntent(Intent intent) {
         this.tag = MifareClassic.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
+        this.tagId = this.tag.getTag().getId().getInt();
+
+        WritableMap map = Arguments.createMap();
+        map.putInt("id", this.tagId);
+        reactContext
+            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+            .emit("onTagDetected", map);
     }
 
     public static void setupForegroundDispatch(final Activity activity, NfcAdapter adapter) {
@@ -276,11 +266,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         this.sectores = sectores;
         this.writeOperation = true;
         this.readOperation = false;
-    }
-
-    @ReactMethod
-    public void getTagId() {
-        this.idOperation = true;
     }
 
     private static byte[] hexStringToByteArray(String s) {
