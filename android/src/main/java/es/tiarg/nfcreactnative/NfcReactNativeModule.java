@@ -255,7 +255,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         this.readOperation = false;
     }
 
-    private void auth(int sectorIndex) {
+    private void auth(int sectorIndex) throws IOException {
         if (authStatuses.get(sectorIndex) == true) {
             return;
         }
