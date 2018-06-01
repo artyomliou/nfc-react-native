@@ -70,77 +70,74 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     readData.putInt("tagId", id);
 
                     for (int i = 0; i < sectores.size(); i++) {
+                        Map sector = sectores.getMap(i);
+                        Int sectorIndex = sector.getInt("sector");
+                        Byte[] claveBytes = hexStringToByteArray(sector.getString("clave"));
                         boolean authResult;
-                        if (sectores.getMap(i).getString("keyType").equals("A")) {
-                            authResult = tag.authenticateSectorWithKeyA(sectores.getMap(i).getInt("sector"), hexStringToByteArray(sectores.getMap(i).getString("clave")));
+
+                        if (sector.getString("keyType").equals("A")) {
+                            authResult = tag.authenticateSectorWithKeyA(sectorIndex, claveBytes);
                         } else {
-                            authResult = tag.authenticateSectorWithKeyB(sectores.getMap(i).getInt("sector"), hexStringToByteArray(sectores.getMap(i).getString("clave")));
+                            authResult = tag.authenticateSectorWithKeyB(sectorIndex, claveBytes);
                         }
 
-                        if (tagId != 0 && writeOperation && tagId != id) {
-                            WritableMap error = Arguments.createMap();
-                            error.putString("error", "Tag id doesn't match");
-
-                            reactContext
-                                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                    .emit("onTagError", error);
-
-                            writeOperation = false;
-                            tag.close();
-                            return;
-                        }
                         if (!authResult) {
-                            WritableMap error = Arguments.createMap();
-                            error.putString("error", "Auth error");
-
-                            reactContext
-                                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                    .emit("onTagError", error);
-
                             writeOperation = false;
                             readOperation = false;
-                            tag.close();
-                            return;
+                            throw new Exception("Auth Error: failed at sector " + sectorIndex);
                         }
+                    }
 
-                        if (authResult) {
-                            WritableMap dataSector = Arguments.createMap();
-                            WritableArray blocksXSector = Arguments.createArray();
+                    for (int i = 0; i < sectores.size(); i++) {
+                        // if (tagId != 0 && writeOperation && tagId != id) {
+                        //     WritableMap error = Arguments.createMap();
+                        //     error.putString("error", "Tag id doesn't match");
+
+                        //     reactContext
+                        //             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                        //             .emit("onTagError", error);
+
+                        //     writeOperation = false;
+                        //     tag.close();
+                        //     return;
+                        // }
+
+
+                        WritableMap dataSector = Arguments.createMap();
+                        WritableArray blocksXSector = Arguments.createArray();
                             
-                            if (readOperation) {
-                                for (int j = 0; j < sectores.getMap(i).getArray("blocks").size(); j++) 
-                                {
-                                    int iBloque = sectores.getMap(i).getArray("blocks").getInt(j);
-                                    byte[] blockData = tag.readBlock(4 * sectores.getMap(i).getInt("sector") + iBloque);
-                                    blocksXSector.pushArray(Arguments.fromArray(arrayBytesToArrayInts(blockData)));
-                                }
-
-                                dataSector.putArray("blocks", blocksXSector);
-                                dataSector.putInt("sector", sectores.getMap(i).getInt("sector"));
-
-                                readDataSectors.pushMap(dataSector);
+                        if (readOperation) {
+                            for (int j = 0; j < sectores.getMap(i).getArray("blocks").size(); j++) 
+                            {
+                                int iBloque = sectores.getMap(i).getArray("blocks").getInt(j);
+                                byte[] blockData = tag.readBlock(4 * sectores.getMap(i).getInt("sector") + iBloque);
+                                blocksXSector.pushArray(Arguments.fromArray(arrayBytesToArrayInts(blockData)));
                             }
+
+                            dataSector.putArray("blocks", blocksXSector);
+                            dataSector.putInt("sector", sectores.getMap(i).getInt("sector"));
+
+                            readDataSectors.pushMap(dataSector);
+                        }
                             
-                            if (writeOperation) {
-                                for (int k = 0; k < sectores.getMap(i).getArray("blocks").size(); k++)
-                                {
-                                    ReadableMap rmBloque = sectores.getMap(i).getArray("blocks").getMap(k);
+                        if (writeOperation) {
+                            for (int k = 0; k < sectores.getMap(i).getArray("blocks").size(); k++) {
+                                ReadableMap rmBloque = sectores.getMap(i).getArray("blocks").getMap(k);
 
-                                    ReadableNativeArray data = (ReadableNativeArray)rmBloque.getArray("data");
+                                ReadableNativeArray data = (ReadableNativeArray)rmBloque.getArray("data");
 
-                                    int[] writeDataA = new int[data.size()];
-                                    for(int l = 0; l < data.size(); l++)
+                                int[] writeDataA = new int[data.size()];
+                                for(int l = 0; l < data.size(); l++)
                                         writeDataA[l] = data.getInt(l);
 
-                                    int blockIndex = 4 * sectores.getMap(i).getInt("sector") + rmBloque.getInt("index");
-                                    tag.writeBlock(blockIndex, arrayIntsToArrayBytes(writeDataA));
+                                int blockIndex = 4 * sectores.getMap(i).getInt("sector") + rmBloque.getInt("index");
+                                tag.writeBlock(blockIndex, arrayIntsToArrayBytes(writeDataA));
 
-                                    blocksXSector.pushMap(Arguments.createMap());
-                                }
-                                dataSector.putArray("blocks", blocksXSector);
-                                dataSector.putInt("sector", sectores.getMap(i).getInt("sector"));
-                                writeData.pushMap(dataSector);
+                                blocksXSector.pushMap(Arguments.createMap());
                             }
+                            dataSector.putArray("blocks", blocksXSector);
+                            dataSector.putInt("sector", sectores.getMap(i).getInt("sector"));
+                            writeData.pushMap(dataSector);
                         }
                     }
                     tag.close();
