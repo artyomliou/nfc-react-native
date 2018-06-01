@@ -72,7 +72,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     for (int i = 0; i < sectores.size(); i++) {
                         ReadableMap sector = sectores.getMap(i);
                         int sectorIndex = sector.getInt("sector");
-                        Byte[] claveBytes = hexStringToByteArray(sector.getString("clave"));
+                        byte[] claveBytes = hexStringToByteArray(sector.getString("clave"));
                         boolean authResult;
 
                         if (sector.getString("keyType").equals("A")) {
