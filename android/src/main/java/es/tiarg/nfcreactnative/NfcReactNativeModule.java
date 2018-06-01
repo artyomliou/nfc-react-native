@@ -155,11 +155,11 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     public void setKeys(ReadableArray keys, ReadableArray types) {
         this.keys = new ArrayList<String>(keys.size());
         for (int i = 0; i < keys.size(); i++) {
-            this.keys.set(i, keys.getInt(i));
+            this.keys.set(i, keys.getString(i));
         }
         this.types = new ArrayList<String>(types.size());
         for (int i = 0; i < types.size(); i++) {
-            this.types.set(i, types.getInt(i));
+            this.types.set(i, types.getString(i));
         }
     }
 
@@ -168,10 +168,10 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         WritableMap map = Arguments.createMap();
         try {
             if (tag == null) {
-                throw new Excpetion("Didnt detected any tag");
+                throw new Exception("Didnt detected any tag");
             }
             if (tag.isConnected() == true) {
-                throw new Excpetion("Connected with " + String.valueOf(this.tagId));
+                throw new Exception("Connected with " + String.valueOf(this.tagId));
             }
 
             tag.connect();
@@ -179,7 +179,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             map.putBoolean("status", true);
             promise.resolve(map);
 
-        } catch (Excpetion e) {
+        } catch (Exception e) {
             promise.reject(E_LAYOUT_ERROR, e);
         }
     }
@@ -189,10 +189,10 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         WritableMap map = Arguments.createMap();
         try {
             if (tag == null) {
-                throw new Excpetion("Didnt detected any tag");
+                throw new Exception("Didnt detected any tag");
             }
             if (tag.isConnected() == false) {
-                throw new Excpetion("Not connected");
+                throw new Exception("Not connected");
             }
             
             tag.close();
@@ -200,7 +200,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             map.putBoolean("status", true);
             promise.resolve(map);
             
-        } catch (Excpetion e) {
+        } catch (Exception e) {
             promise.reject(E_LAYOUT_ERROR, e);
         }
     }
@@ -226,12 +226,12 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         WritableMap map = Arguments.createMap();
         try {
             auth(sectorIndex);
-            ArrayList<Integer> valueList = new ArrayList<Integer>(values.size());
+            int[] valuesArray = new int[values.size()];
             for (int i = 0; i < values.size(); i++) {
-                valueList.set(i, values.getInt(i));
+                valuesArray[i] = values.getInt(i);
             }
+            byte[] valueBytes = arrayIntsToArrayBytes(valuesArray);
 
-            byte[] valueBytes = arrayIntsToArrayBytes(valueList.toArray());
             tag.writeBlock(4 * sectorIndex + blockIndex, valueBytes);
 
             map.putBoolean("status", true);
