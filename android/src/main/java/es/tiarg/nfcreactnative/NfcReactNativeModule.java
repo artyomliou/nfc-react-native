@@ -59,27 +59,31 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
     private static final String E_LAYOUT_ERROR = "E_LAYOUT_ERROR";
 
-    private ArrayList<String> keys;
-    private ArrayList<String> types;
-    private ArrayList<Boolean> authStatuses;
-    private Queue<String> operations;
-    private Queue<ReadableMap> parameters;
-    private Queue<Promise> promises;
-
-    private int tagId;
     private NfcAdapter mNfcAdapter;
-    private MifareClassic tag;
+
+    private volatile int tagId;
+    private volatile MifareClassic tag;
+
+    private volatile String authKey;
+    private volatile String authType;
+    private volatile ArrayList<Boolean> authStatuses;
+    private volatile Queue<String> operations;
+    private volatile Queue<ReadableMap> parameters;
+    private volatile Queue<Promise> promises;
 
     public NfcReactNativeModule(ReactApplicationContext reactContext) {
         super(reactContext);
         this.reactContext = reactContext;
-        this.tag = null;
-        this.operations = new LinkedList<String>();
-        this.parameters = new LinkedList<ReadableMap>();
-        this.promises = new LinkedList<Promise>();
 
-        this.reactContext.addActivityEventListener(this);
-        this.reactContext.addLifecycleEventListener(this);
+        tag = null;
+
+        resetTagInfos(1);
+        operations = new LinkedList<String>();
+        parameters = new LinkedList<ReadableMap>();
+        promises = new LinkedList<Promise>();
+
+        reactContext.addActivityEventListener(this);
+        reactContext.addLifecycleEventListener(this);
 
         ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor(); 
         exec.scheduleAtFixedRate(new OperationComsumerThread(), 0, 1000, TimeUnit.MILLISECONDS); 
@@ -90,7 +94,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         if (mNfcAdapter != null) {
             setupForegroundDispatch(getCurrentActivity(), mNfcAdapter);
         } else {
-            mNfcAdapter = NfcAdapter.getDefaultAdapter(this.reactContext);
+            mNfcAdapter = NfcAdapter.getDefaultAdapter(reactContext);
         }
     }
 
@@ -119,20 +123,20 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     private void handleIntent(Intent intent) {
-        this.tag = MifareClassic.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
-        this.tagId = ByteBuffer.wrap(this.tag.getTag().getId()).getInt();
+        tag = MifareClassic.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
+        tagId = ByteBuffer.wrap(tag.getTag().getId()).getInt();
 
         // reset variables for further operation
-        int sectorCount = this.tag.getSectorCount();
+        int sectorCount = tag.getSectorCount();
         resetTagInfos(sectorCount);
         clearQueue();
 
         // pass info about this tag to JS
         WritableMap map = Arguments.createMap();
-        map.putInt("id", this.tagId);
-        map.putInt("size", this.tag.getSize());
-        map.putInt("timeout", this.tag.getTimeout());
-        map.putInt("type", this.tag.getType());
+        map.putInt("id", tagId);
+        map.putInt("size", tag.getSize());
+        map.putInt("timeout", tag.getTimeout());
+        map.putInt("type", tag.getType());
 
         reactContext
             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
@@ -162,7 +166,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 try {
                     tag.connect();
                 } catch (IOException e) {
-                    Log.d("OperationComsumerThread", e.getMessage());
+                    Log.d("ReactNative", e.getMessage());
                     clearQueue(e.getMessage());
                     return;
                 }
@@ -176,7 +180,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 int sectorIndex = param.getInt("sector");
                 int blockIndex = param.getInt("block");
 
-                Log.d("OperationComsumerThread", op);
+                Log.d("ReactNative", op);
 
                 try {
                     switch (op) {
@@ -214,6 +218,25 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                         .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class) 
                         .emit("onTagError", error);
                 }
+            }
+        }
+
+        private void auth(int sectorIndex) throws Exception {
+            if (authStatuses.get(sectorIndex) == true) {
+                return;
+            }
+            boolean passed;
+            if (authType.equals("A")) {
+                byte[] keyBytes = authKey.substring(0, 6).getBytes();
+                passed = tag.authenticateSectorWithKeyA(sectorIndex, keyBytes);
+            } else {
+                byte[] keyBytes = authKey.substring(6).getBytes();
+                passed = tag.authenticateSectorWithKeyB(sectorIndex, keyBytes);
+            }
+            authStatuses.set(sectorIndex, passed);
+    
+            if (passed == false) {
+                throw new IOException("Authentication failed: sector" + String.valueOf(sectorIndex) + ", type" + authType + ", key=" + authKey);
             }
         }
 
@@ -267,16 +290,9 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     @ReactMethod
-    public void setKeys(ReadableArray newKeys, ReadableArray newTypes) {
-        keys = new ArrayList<String>(Collections.nCopies(newKeys.size(), ""));
-        for (int i = 0; i < newKeys.size(); i++) {
-            keys.set(i, newKeys.getString(i));
-        }
-
-        types = new ArrayList<String>(Collections.nCopies(newTypes.size(), ""));
-        for (int i = 0; i < newTypes.size(); i++) {
-            types.set(i, newTypes.getString(i));
-        }
+    public void setKey(String newKey, String newType) {
+        authKey = newKey;
+        authType = newType;
     }
 
     @ReactMethod
@@ -294,16 +310,16 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     private void resetTagInfos(int sectorCount) {
-        this.authStatuses = new ArrayList<Boolean>(Collections.nCopies(sectorCount, false));
-        this.keys = new ArrayList<String>(Collections.nCopies(sectorCount, ""));
-        this.types = new ArrayList<String>(Collections.nCopies(sectorCount, ""));
+        authStatuses = new ArrayList<Boolean>(Collections.nCopies(sectorCount, false));
+        authKey = "FFFFFFFFFFFF";
+        authType = "A";
     }
 
     private void clearQueue() {
         operations.clear();
         parameters.clear();
 
-        while (this.promises.size() > 0) {
+        while (promises.size() > 0) {
             Promise promise = promises.remove();
             promise.reject(E_LAYOUT_ERROR, "Clear queue.");
         }
@@ -317,21 +333,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             Promise promise = promises.remove();
             promise.reject(E_LAYOUT_ERROR, message);
         }
-    }
-
-    private void auth(int sectorIndex) throws Exception {
-        if (authStatuses.get(sectorIndex) == true) {
-            return;
-        }
-        boolean passed;
-        if (types.get(sectorIndex).equals("A")) {
-            byte[] keyBytes = keys.get(sectorIndex).substring(0, 6).getBytes();
-            passed = tag.authenticateSectorWithKeyA(sectorIndex, keyBytes);
-        } else {
-            byte[] keyBytes = keys.get(sectorIndex).substring(6).getBytes();
-            passed = tag.authenticateSectorWithKeyB(sectorIndex, keyBytes);
-        }
-        authStatuses.set(sectorIndex, passed);
     }
 
     private static byte[] hexStringToByteArray(String s) {
