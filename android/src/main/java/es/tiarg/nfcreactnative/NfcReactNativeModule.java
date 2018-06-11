@@ -18,6 +18,7 @@ import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.nfc.TagLostException;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.tech.MifareClassic;
@@ -26,12 +27,16 @@ import android.os.Bundle;
 import android.util.Log;
 
 import java.lang.Exception;
+import java.io.UnsupportedEncodingException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
+import java.util.Collections;
+import java.util.Queue;
+import java.util.LinkedList;
 import java.util.ArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -57,6 +62,9 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     private ArrayList<String> keys;
     private ArrayList<String> types;
     private ArrayList<Boolean> authStatuses;
+    private Queue<String> operations;
+    private Queue<ReadableMap> parameters;
+    private Queue<Promise> promises;
 
     private int tagId;
     private NfcAdapter mNfcAdapter;
@@ -66,9 +74,15 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         super(reactContext);
         this.reactContext = reactContext;
         this.tag = null;
+        this.operations = new LinkedList<String>();
+        this.parameters = new LinkedList<ReadableMap>();
+        this.promises = new LinkedList<Promise>();
 
         this.reactContext.addActivityEventListener(this);
         this.reactContext.addLifecycleEventListener(this);
+
+        ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor(); 
+        exec.scheduleAtFixedRate(new OperationComsumerThread(), 0, 1000, TimeUnit.MILLISECONDS); 
     }
 
     @Override
@@ -108,11 +122,12 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         this.tag = MifareClassic.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
         this.tagId = ByteBuffer.wrap(this.tag.getTag().getId()).getInt();
 
-        int length = this.tag.getSectorCount();
-        this.authStatuses = new ArrayList<Boolean>(length);
-        this.keys = new ArrayList<String>(length);
-        this.types = new ArrayList<String>(length);
+        // reset variables for further operation
+        int sectorCount = this.tag.getSectorCount();
+        resetTagInfos(sectorCount);
+        clearQueue();
 
+        // pass info about this tag to JS
         WritableMap map = Arguments.createMap();
         map.putInt("id", this.tagId);
         map.putInt("size", this.tag.getSize());
@@ -136,6 +151,112 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         adapter.disableForegroundDispatch(activity);
     }
 
+    private class OperationComsumerThread implements Runnable {
+        public void run() {
+            if (tag == null) {
+                return;
+            } else if (operations.size() == 0) {
+                return;
+            }
+            if (tag.isConnected() == false) {
+                try {
+                    tag.connect();
+                } catch (IOException e) {
+                    Log.d("OperationComsumerThread", e.getMessage());
+                    clearQueue(e.getMessage());
+                    return;
+                }
+            }
+
+            while (operations.size() > 0) {
+                String op = operations.remove();
+                ReadableMap param = parameters.remove();
+                Promise promise = promises.remove();
+
+                int sectorIndex = param.getInt("sector");
+                int blockIndex = param.getInt("block");
+
+                Log.d("OperationComsumerThread", op);
+
+                try {
+                    switch (op) {
+                        case "read":
+                            doRead(sectorIndex, blockIndex, promise);
+                            break;
+                        case "writeByte":
+                            int byteIndex = param.getInt("byte");
+                            String data = param.getString("data");
+                            doWrite(sectorIndex, blockIndex, byteIndex, data, promise);
+                            break;
+                        }
+                }
+                catch (TagLostException e) {
+                    promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e)); 
+                    clearQueue(e.getMessage());
+                    break;
+                    // queue is cleared, no further operation.
+                    // loop stop here,
+                }
+                catch (Exception e) {
+                    promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e)); 
+                    // loop will go on
+                }
+            }
+            
+            if (tag.isConnected()) {
+                try {
+                    tag.close();
+                } catch (IOException e) {
+                    WritableMap error = Arguments.createMap(); 
+                    error.putString("error", e.toString()); 
+ 
+                    reactContext 
+                        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class) 
+                        .emit("onTagError", error);
+                }
+            }
+        }
+
+        private void doRead(int sectorIndex, int blockIndex, Promise promise) throws TagLostException, Exception {
+            auth(sectorIndex);
+                
+            byte[] blockBytes = tag.readBlock(4 * sectorIndex + blockIndex);
+            String blockString = byteArrayToHexString(blockBytes);
+
+            WritableMap map = Arguments.createMap();
+            map.putString("payload", blockString);
+            promise.resolve(map);
+        }
+
+        private void doWrite(int sectorIndex, int blockIndex, int byteIndex, String data, Promise promise) throws TagLostException, Exception {
+            auth(sectorIndex);
+                
+            // blockBytes' length of a MifareClassic 1k should be 16 
+            byte[] blockBytes = tag.readBlock(4 * sectorIndex + blockIndex);
+
+            if (byteIndex > blockBytes.length - 1) {
+                throw new Exception("Out of bound: invalid byte index to wrtie");
+            } else {
+                blockBytes = overwriteBytesWithString(blockBytes, byteIndex, data);
+            }
+
+            tag.writeBlock(4 * sectorIndex + blockIndex, blockBytes);
+
+            WritableMap map = Arguments.createMap();
+            map.putString("payload", byteArrayToHexString(blockBytes));
+            promise.resolve(map);
+        }
+
+        private byte[] overwriteBytesWithString(byte[] blockBytes, int byteIndex, String data) throws UnsupportedEncodingException {
+            byte[] bytes = data.getBytes("UTF-8");
+            for(byte b:bytes) {
+                blockBytes[byteIndex] = b;
+                byteIndex++;
+            }
+            return blockBytes;
+        }
+    }
+
     /**
      * @return the name of this module. This will be the name used to {@code require()} this module
      * from javascript.
@@ -146,104 +267,68 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     @ReactMethod
-    public void setKeys(ReadableArray keys, ReadableArray types) {
-        this.keys = new ArrayList<String>(keys.size());
-        for (int i = 0; i < keys.size(); i++) {
-            this.keys.set(i, keys.getString(i));
+    public void setKeys(ReadableArray newKeys, ReadableArray newTypes) {
+        keys = new ArrayList<String>(Collections.nCopies(newKeys.size(), ""));
+        for (int i = 0; i < newKeys.size(); i++) {
+            keys.set(i, newKeys.getString(i));
         }
-        this.types = new ArrayList<String>(types.size());
-        for (int i = 0; i < types.size(); i++) {
-            this.types.set(i, types.getString(i));
-        }
-    }
 
-    @ReactMethod
-    public void connect(Promise promise) {
-        WritableMap map = Arguments.createMap();
-        try {
-            if (tag == null) {
-                throw new Exception("Didnt detected any tag");
-            }
-            if (tag.isConnected() == true) {
-                throw new Exception("Connected with " + String.valueOf(this.tagId));
-            }
-
-            tag.connect();
-
-            map.putBoolean("status", true);
-            promise.resolve(map);
-
-        } catch (Exception e) {
-            promise.reject(E_LAYOUT_ERROR, e);
+        types = new ArrayList<String>(Collections.nCopies(newTypes.size(), ""));
+        for (int i = 0; i < newTypes.size(); i++) {
+            types.set(i, newTypes.getString(i));
         }
     }
 
     @ReactMethod
-    public void close(Promise promise) {
-        WritableMap map = Arguments.createMap();
-        try {
-            if (tag == null) {
-                throw new Exception("Didnt detected any tag");
-            }
-            if (tag.isConnected() == false) {
-                throw new Exception("Not connected");
-            }
-            
-            tag.close();
-
-            map.putBoolean("status", true);
-            promise.resolve(map);
-            
-        } catch (Exception e) {
-            promise.reject(E_LAYOUT_ERROR, e);
-        }
+    public void read(ReadableMap map, Promise promise) {
+        operations.add("read");
+        parameters.add(map);
+        promises.add(promise);
     }
 
     @ReactMethod
-    public void read(int sectorIndex, int blockIndex, Promise promise) {
-        WritableMap map = Arguments.createMap();
-        try {
-            auth(sectorIndex);
-            byte[] blockBytes = tag.readBlock(4 * sectorIndex + blockIndex);
-            String blockString = byteArrayToHexString(blockBytes);
+    public void writeByte(ReadableMap map, Promise promise) {
+        operations.add("writeByte");
+        parameters.add(map);
+        promises.add(promise);
+    }
 
-            map.putBoolean("status", true);
-            map.putString("payload", blockString);
-            promise.resolve(map);
-        } catch (Exception e) {
-            promise.reject(E_LAYOUT_ERROR, e);
+    private void resetTagInfos(int sectorCount) {
+        this.authStatuses = new ArrayList<Boolean>(Collections.nCopies(sectorCount, false));
+        this.keys = new ArrayList<String>(Collections.nCopies(sectorCount, ""));
+        this.types = new ArrayList<String>(Collections.nCopies(sectorCount, ""));
+    }
+
+    private void clearQueue() {
+        operations.clear();
+        parameters.clear();
+
+        while (this.promises.size() > 0) {
+            Promise promise = promises.remove();
+            promise.reject(E_LAYOUT_ERROR, "Clear queue.");
         }
     }
 
-    @ReactMethod
-    public void write(int sectorIndex, int blockIndex, ReadableArray values, Promise promise) {
-        WritableMap map = Arguments.createMap();
-        try {
-            auth(sectorIndex);
-            int[] valuesArray = new int[values.size()];
-            for (int i = 0; i < values.size(); i++) {
-                valuesArray[i] = values.getInt(i);
-            }
-            byte[] valueBytes = arrayIntsToArrayBytes(valuesArray);
+    private void clearQueue(String message) {
+        operations.clear();
+        parameters.clear();
 
-            tag.writeBlock(4 * sectorIndex + blockIndex, valueBytes);
-
-            map.putBoolean("status", true);
-            promise.resolve(map);
-        } catch (Exception e) {
-            promise.reject(E_LAYOUT_ERROR, e);
+        while (promises.size() > 0) {
+            Promise promise = promises.remove();
+            promise.reject(E_LAYOUT_ERROR, message);
         }
     }
 
-    private void auth(int sectorIndex) throws IOException {
+    private void auth(int sectorIndex) throws Exception {
         if (authStatuses.get(sectorIndex) == true) {
             return;
         }
-        byte[] keyBytes = keys.get(sectorIndex).getBytes();
         boolean passed;
         if (types.get(sectorIndex).equals("A")) {
+            byte[] keyBytes = keys.get(sectorIndex).substring(0, 6).getBytes();
             passed = tag.authenticateSectorWithKeyA(sectorIndex, keyBytes);
         } else {
+            byte[] keyBytes = keys.get(sectorIndex).substring(6).getBytes();
             passed = tag.authenticateSectorWithKeyB(sectorIndex, keyBytes);
         }
         authStatuses.set(sectorIndex, passed);
