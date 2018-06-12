@@ -64,8 +64,8 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     private volatile int tagId;
     private volatile MifareClassic tag;
 
-    private volatile String authKey;
-    private volatile String authType;
+    private volatile String authKey = "FFFFFFFFFFFF";
+    private volatile String authType = "B";
     private volatile ArrayList<Boolean> authStatuses;
     private volatile Queue<String> operations;
     private volatile Queue<ReadableMap> parameters;
@@ -77,7 +77,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
         tag = null;
 
-        resetTagInfos(1);
         operations = new LinkedList<String>();
         parameters = new LinkedList<ReadableMap>();
         promises = new LinkedList<Promise>();
@@ -86,7 +85,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         reactContext.addLifecycleEventListener(this);
 
         ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor(); 
-        exec.scheduleAtFixedRate(new OperationComsumerThread(), 0, 1000, TimeUnit.MILLISECONDS); 
+        exec.scheduleAtFixedRate(new OperationComsumerThread(), 0, 700, TimeUnit.MILLISECONDS); 
     }
 
     @Override
@@ -123,6 +122,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     private void handleIntent(Intent intent) {
+        Log.d("ReactNative", "handleIntent");
         tag = MifareClassic.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
         tagId = ByteBuffer.wrap(tag.getTag().getId()).getInt();
 
@@ -172,15 +172,22 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 }
             }
 
+            boolean retrying = false;
+
             while (operations.size() > 0) {
-                String op = operations.remove();
-                ReadableMap param = parameters.remove();
-                Promise promise = promises.remove();
+
+                String op = operations.peek();
+                ReadableMap param = parameters.peek();
+                Promise promise = promises.peek();
 
                 int sectorIndex = param.getInt("sector");
                 int blockIndex = param.getInt("block");
 
-                Log.d("ReactNative", op);
+                if (retrying) {
+                    Log.d("ReactNative", "retrying...");
+                } else {
+                    Log.d("ReactNative", op);
+                }
 
                 try {
                     switch (op) {
@@ -193,13 +200,33 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                             doWrite(sectorIndex, blockIndex, byteIndex, data, promise);
                             break;
                         }
+
+                    operations.remove();
+                    parameters.remove();
+                    promises.remove();
                 }
                 catch (TagLostException e) {
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e)); 
                     clearQueue(e.getMessage());
                     break;
                     // queue is cleared, no further operation.
-                    // loop stop here,
+                    // loop stop here
+                }
+                catch (IOException e) {
+                    if (retrying) {
+                        retrying = false;
+
+                        promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e)); 
+                        clearQueue(e.getMessage());
+                        break;
+                        // queue is cleared, no further operation.
+                        // loop stop here
+                    } else {
+                        authStatuses.set(sectorIndex, false);
+                        // current operation will be processed one more time,
+                        // with full autnentication procedure
+                        // loop will go on
+                    }
                 }
                 catch (Exception e) {
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e)); 
@@ -225,13 +252,30 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             if (authStatuses.get(sectorIndex) == true) {
                 return;
             }
-            boolean passed;
-            if (authType.equals("A")) {
-                byte[] keyBytes = authKey.substring(0, 6).getBytes();
-                passed = tag.authenticateSectorWithKeyA(sectorIndex, keyBytes);
-            } else {
-                byte[] keyBytes = authKey.substring(6).getBytes();
-                passed = tag.authenticateSectorWithKeyB(sectorIndex, keyBytes);
+            boolean passed = false;
+            byte[][] arrayKeys = new byte[4][6];
+            arrayKeys[0] = MifareClassic.KEY_DEFAULT;
+            arrayKeys[1] = MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY;
+            arrayKeys[2] = MifareClassic.KEY_NFC_FORUM;
+            arrayKeys[3] = hexStringToByteArray(authKey);
+
+            String[] arrayTypes = new String[4];
+            arrayTypes[0] = "A";
+            arrayTypes[1] = "A";
+            arrayTypes[2] = "A";
+            arrayTypes[3] = authType;
+
+            for (int i = 0; i < arrayKeys.length; i++) {
+                if ("A".equals(arrayTypes[i])) {
+                    passed = tag.authenticateSectorWithKeyA(sectorIndex, arrayKeys[i]);
+                } else {
+                    passed = tag.authenticateSectorWithKeyB(sectorIndex, arrayKeys[i]);
+                }
+                
+                if (passed) {
+                    Log.d("ReactNative", "Sector " + String.valueOf(sectorIndex) + ", " + byteArrayToHexString(arrayKeys[i]));
+                    break;
+                }
             }
             authStatuses.set(sectorIndex, passed);
     
@@ -242,8 +286,11 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
         private void doRead(int sectorIndex, int blockIndex, Promise promise) throws TagLostException, Exception {
             auth(sectorIndex);
+
+            blockIndex = getRealBlockIndex(sectorIndex, blockIndex);
+            Log.d("ReactNative", String.valueOf(sectorIndex) + "," + String.valueOf(blockIndex));
                 
-            byte[] blockBytes = tag.readBlock(4 * sectorIndex + blockIndex);
+            byte[] blockBytes = tag.readBlock(blockIndex);
             String blockString = byteArrayToHexString(blockBytes);
 
             WritableMap map = Arguments.createMap();
@@ -253,21 +300,47 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
         private void doWrite(int sectorIndex, int blockIndex, int byteIndex, String data, Promise promise) throws TagLostException, Exception {
             auth(sectorIndex);
-                
-            // blockBytes' length of a MifareClassic 1k should be 16 
-            byte[] blockBytes = tag.readBlock(4 * sectorIndex + blockIndex);
 
+            blockIndex = getRealBlockIndex(sectorIndex, blockIndex);
+            Log.d("ReactNative", String.valueOf(sectorIndex) + "," + String.valueOf(blockIndex));
+            
+            byte[] blockBytes = tag.readBlock(blockIndex);
             if (byteIndex > blockBytes.length - 1) {
                 throw new Exception("Out of bound: invalid byte index to wrtie");
             } else {
                 blockBytes = overwriteBytesWithString(blockBytes, byteIndex, data);
+                tag.writeBlock(blockIndex, blockBytes);
             }
-
-            tag.writeBlock(4 * sectorIndex + blockIndex, blockBytes);
 
             WritableMap map = Arguments.createMap();
             map.putString("payload", byteArrayToHexString(blockBytes));
             promise.resolve(map);
+        }
+
+        /**
+         * When you want to access block 7 in sector 2
+         * (which usually means the last block in sector)
+         * You'll probably get blockIndex as 7 or 3.
+         * 
+         * When you get blockIndex as 3,
+         * you have to calculate the real blockIndex which Android API needs.
+         * 
+         * This function is designed to fix this.
+         */
+        private int getRealBlockIndex(int sectorIndex, int blockIndex) throws Exception {
+            int firstBlockInSector = tag.sectorToBlock(sectorIndex);
+            int blockCounts = tag.getBlockCountInSector(sectorIndex);
+            int lastBlockInSector = firstBlockInSector + blockCounts - 1;
+
+            return sectorIndex * blockCounts + blockIndex;
+
+            // if (firstBlockInSector <= blockIndex && blockIndex <= lastBlockInSector) {
+            //     return blockIndex;
+            // } else if (0 <= blockIndex && blockIndex <= blockCounts - 1) {
+            //     return firstBlockInSector + blockIndex - 1;
+            // } else {
+            //     throw new Exception("Out of bound: sector " + String.valueOf(sectorIndex) + ", block " + String.valueOf(blockIndex));
+            // }
         }
 
         private byte[] overwriteBytesWithString(byte[] blockBytes, int byteIndex, String data) throws UnsupportedEncodingException {
@@ -291,6 +364,9 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
     @ReactMethod
     public void setKey(String newKey, String newType) {
+        if (newKey == null || newType == null) {
+            return;
+        }
         authKey = newKey;
         authType = newType;
     }
@@ -310,12 +386,12 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     private void resetTagInfos(int sectorCount) {
+        Log.d("ReactNative", "resetTagInfos");
         authStatuses = new ArrayList<Boolean>(Collections.nCopies(sectorCount, false));
-        authKey = "FFFFFFFFFFFF";
-        authType = "A";
     }
 
     private void clearQueue() {
+        Log.d("ReactNative", "clearQueue");
         operations.clear();
         parameters.clear();
 
@@ -326,6 +402,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     private void clearQueue(String message) {
+        Log.d("ReactNative", "clearQueue");
         operations.clear();
         parameters.clear();
 
