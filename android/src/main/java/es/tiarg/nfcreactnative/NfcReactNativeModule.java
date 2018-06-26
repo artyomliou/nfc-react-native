@@ -332,15 +332,15 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             int blockCounts = tag.getBlockCountInSector(sectorIndex);
             int lastBlockInSector = firstBlockInSector + blockCounts - 1;
 
-            return sectorIndex * blockCounts + blockIndex;
-
-            // if (firstBlockInSector <= blockIndex && blockIndex <= lastBlockInSector) {
-            //     return blockIndex;
-            // } else if (0 <= blockIndex && blockIndex <= blockCounts - 1) {
-            //     return firstBlockInSector + blockIndex - 1;
-            // } else {
-            //     throw new Exception("Out of bound: sector " + String.valueOf(sectorIndex) + ", block " + String.valueOf(blockIndex));
-            // }
+            if (firstBlockInSector <= blockIndex && blockIndex <= lastBlockInSector) {
+                // blockCounts = 4, sector = 3, block = 9
+                return blockIndex;
+            } else if (0 <= blockIndex && blockIndex <= blockCounts - 1) {
+                // blockCounts = 4, sector = 3, block = 0
+                return firstBlockInSector + blockIndex - 1;
+            } else {
+                throw new Exception("Out of bound: sector " + String.valueOf(sectorIndex) + ", block " + String.valueOf(blockIndex));
+            }
         }
 
         private byte[] overwriteBytesWithString(byte[] blockBytes, int byteIndex, String data) throws UnsupportedEncodingException {
