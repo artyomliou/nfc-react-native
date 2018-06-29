@@ -260,16 +260,16 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             }
             boolean passed = false;
             byte[][] arrayKeys = new byte[4][6];
-            arrayKeys[0] = MifareClassic.KEY_DEFAULT;
-            arrayKeys[1] = MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY;
-            arrayKeys[2] = MifareClassic.KEY_NFC_FORUM;
-            arrayKeys[3] = hexStringToByteArray(authKey);
+            arrayKeys[0] = hexStringToByteArray(authKey);
+            arrayKeys[1] = MifareClassic.KEY_DEFAULT;
+            arrayKeys[2] = MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY;
+            arrayKeys[3] = MifareClassic.KEY_NFC_FORUM;
 
             String[] arrayTypes = new String[4];
-            arrayTypes[0] = "A";
+            arrayTypes[0] = authType;
             arrayTypes[1] = "A";
             arrayTypes[2] = "A";
-            arrayTypes[3] = authType;
+            arrayTypes[3] = "A";
 
             for (int i = 0; i < arrayKeys.length; i++) {
                 try {
@@ -281,7 +281,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 } catch (TagLostException e) {
                     throw e;
                 } catch (IOException e) {
-                    //
+                    Log.d("ReactNative", e.getMessage());
                 }
                 
                 if (passed) {
