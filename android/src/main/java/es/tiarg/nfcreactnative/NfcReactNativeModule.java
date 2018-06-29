@@ -272,10 +272,16 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             arrayTypes[3] = authType;
 
             for (int i = 0; i < arrayKeys.length; i++) {
-                if ("A".equals(arrayTypes[i])) {
-                    passed = tag.authenticateSectorWithKeyA(sectorIndex, arrayKeys[i]);
-                } else {
-                    passed = tag.authenticateSectorWithKeyB(sectorIndex, arrayKeys[i]);
+                try {
+                    if ("A".equals(arrayTypes[i])) {
+                        passed = tag.authenticateSectorWithKeyA(sectorIndex, arrayKeys[i]);
+                    } else {
+                        passed = tag.authenticateSectorWithKeyB(sectorIndex, arrayKeys[i]);
+                    }
+                } catch (TagLostException e) {
+                    throw e;
+                } catch (IOException e) {
+                    //
                 }
                 
                 if (passed) {
