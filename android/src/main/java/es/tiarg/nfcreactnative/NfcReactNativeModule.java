@@ -214,6 +214,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     // loop stop here
                 }
                 catch (IOException e) {
+                    Log.d("ReactNative", e.getMessage());
                     if (retrying) {
                         retrying = false;
 
@@ -231,6 +232,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     }
                 }
                 catch (Exception e) {
+                    Log.d("ReactNative", e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                     promises.remove();
                     clearQueue(e.getMessage());
