@@ -77,9 +77,9 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
         tag = null;
 
-        operations = new Queue<String>();
-        parameters = new Queue<ReadableMap>();
-        promises = new Queue<Promise>();
+        operations = new LinkedList<String>();
+        parameters = new LinkedList<ReadableMap>();
+        promises = new LinkedList<Promise>();
 
         reactContext.addActivityEventListener(this);
         reactContext.addLifecycleEventListener(this);
