@@ -207,6 +207,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 }
                 catch (TagLostException e) {
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e)); 
+                    promises.remove();
                     clearQueue(e.getMessage());
                     break;
                     // queue is cleared, no further operation.
@@ -217,6 +218,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                         retrying = false;
 
                         promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e)); 
+                        promises.remove();
                         clearQueue(e.getMessage());
                         break;
                         // queue is cleared, no further operation.
@@ -229,8 +231,10 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     }
                 }
                 catch (Exception e) {
-                    promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e)); 
-                    // loop will go on
+                    promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
+                    promises.remove();
+                    clearQueue(e.getMessage());
+                    // loop stop here, for any unknown exception
                 }
             }
             
