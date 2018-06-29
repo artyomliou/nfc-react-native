@@ -172,8 +172,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 }
             }
 
-            boolean retrying = false;
-
             while (operations.size() > 0) {
 
                 String op = operations.element();
@@ -183,11 +181,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 int sectorIndex = param.getInt("sector");
                 int blockIndex = param.getInt("block");
 
-                if (retrying) {
-                    Log.d("ReactNative", "retrying...");
-                } else {
-                    Log.d("ReactNative", op);
-                }
+                Log.d("ReactNative", op);
 
                 try {
                     switch (op) {
@@ -205,38 +199,14 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     parameters.remove();
                     promises.remove();
                 }
-                catch (TagLostException e) {
-                    promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e)); 
-                    promises.remove();
-                    clearQueue(e.getMessage());
-                    break;
-                    // queue is cleared, no further operation.
-                    // loop stop here
-                }
-                catch (IOException e) {
-                    Log.d("ReactNative", e.getMessage());
-                    if (retrying) {
-                        retrying = false;
-
-                        promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e)); 
-                        promises.remove();
-                        clearQueue(e.getMessage());
-                        break;
-                        // queue is cleared, no further operation.
-                        // loop stop here
-                    } else {
-                        authStatuses.set(sectorIndex, false);
-                        // current operation will be processed one more time,
-                        // with full autnentication procedure
-                        // loop will go on
-                    }
-                }
                 catch (Exception e) {
                     Log.d("ReactNative", e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                     promises.remove();
                     clearQueue(e.getMessage());
-                    // loop stop here, for any unknown exception
+                    break;
+                    // queue is cleared, no further operation.
+                    // loop stop here
                 }
             }
             
