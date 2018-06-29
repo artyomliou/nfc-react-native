@@ -176,9 +176,9 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
 
             while (operations.size() > 0) {
 
-                String op = operations.peek();
-                ReadableMap param = parameters.peek();
-                Promise promise = promises.peek();
+                String op = operations.element();
+                ReadableMap param = parameters.element();
+                Promise promise = promises.element();
 
                 int sectorIndex = param.getInt("sector");
                 int blockIndex = param.getInt("block");
