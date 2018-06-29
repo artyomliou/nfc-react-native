@@ -229,17 +229,19 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 return;
             }
             boolean passed = false;
-            byte[][] arrayKeys = new byte[4][6];
+            byte[][] arrayKeys = new byte[5][6];
             arrayKeys[0] = hexStringToByteArray(authKey);
-            arrayKeys[1] = MifareClassic.KEY_DEFAULT;
-            arrayKeys[2] = MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY;
-            arrayKeys[3] = MifareClassic.KEY_NFC_FORUM;
+            arrayKeys[1] = arrayKeys[0];
+            arrayKeys[2] = MifareClassic.KEY_DEFAULT;
+            arrayKeys[3] = MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY;
+            arrayKeys[4] = MifareClassic.KEY_NFC_FORUM;
 
-            String[] arrayTypes = new String[4];
+            String[] arrayTypes = new String[5];
             arrayTypes[0] = authType;
-            arrayTypes[1] = "A";
+            arrayTypes[1] = "A".equals(authType) ? "B" : "A";
             arrayTypes[2] = "A";
             arrayTypes[3] = "A";
+            arrayTypes[4] = "A";
 
             for (int i = 0; i < arrayKeys.length; i++) {
                 try {
