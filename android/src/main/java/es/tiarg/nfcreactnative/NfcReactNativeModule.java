@@ -235,7 +235,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             }
             WritableMap returns = Arguments.createMap();
             returns.putBoolean("payload", true);
-            promise.resolve();
+            promise.resolve(returns);
         } catch (IOException e) {
             Log.d("ReactNative", e.getMessage());
             promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
