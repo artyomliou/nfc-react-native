@@ -142,7 +142,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     @ReactMethod
-    public void read(ReadableMap map, Promise promise) {
+    public void read(ReadableMap param, Promise promise) {
         AsyncTask.execute(new Runnable() {
             @Override
             public void run() {
@@ -180,7 +180,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     @ReactMethod
-    public void writeByte(ReadableMap map, Promise promise) {
+    public void writeByte(ReadableMap param, Promise promise) {
         AsyncTask.execute(new Runnable() {
             @Override
             public void run() {
@@ -225,7 +225,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     @ReactMethod
-    public void close(ReadableMap map, Promise promise) {
+    public void close(Promise promise) {
         try {
             if (tag == null) {
                 throw new IOException("沒有抓到標籤");
