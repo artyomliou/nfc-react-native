@@ -164,9 +164,9 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     byte[] blockBytes = tag.readBlock(blockIndex);
                     String blockString = byteArrayToHexString(blockBytes);
 
-                    WritableMap map = Arguments.createMap();
-                    map.putString("payload", blockString);
-                    promise.resolve(map);
+                    WritableMap returns = Arguments.createMap();
+                    returns.putString("payload", blockString);
+                    promise.resolve(returns);
 
                 } catch (IOException e) {
                     Log.d("ReactNative", e.getMessage());
@@ -209,9 +209,9 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                         tag.writeBlock(blockIndex, blockBytes);
                     }
 
-                    WritableMap map = Arguments.createMap();
-                    map.putString("payload", byteArrayToHexString(blockBytes));
-                    promise.resolve(map);
+                    WritableMap returns = Arguments.createMap();
+                    returns.putString("payload", byteArrayToHexString(blockBytes));
+                    promise.resolve(returns);
 
                 } catch (IOException e) {
                     Log.d("ReactNative", e.getMessage());
@@ -233,8 +233,8 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             if (tag.isConnected()) {
                 tag.close();
             }
-            WritableMap map = Arguments.createMap();
-            map.putBoolean("payload", true);
+            WritableMap returns = Arguments.createMap();
+            returns.putBoolean("payload", true);
             promise.resolve();
         } catch (IOException e) {
             Log.d("ReactNative", e.getMessage());
