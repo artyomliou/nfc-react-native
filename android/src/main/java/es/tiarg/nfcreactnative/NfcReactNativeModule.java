@@ -133,7 +133,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     @ReactMethod
-    public void setKey(String newKey, String newType) {
+    public void setKey(final String newKey, final String newType) {
         if (newKey == null || newType == null) {
             return;
         }
@@ -142,7 +142,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     @ReactMethod
-    public void read(ReadableMap param, Promise promise) {
+    public void read(final ReadableMap param, final Promise promise) {
         AsyncTask.execute(new Runnable() {
             @Override
             public void run() {
@@ -180,7 +180,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     @ReactMethod
-    public void writeByte(ReadableMap param, Promise promise) {
+    public void writeByte(final ReadableMap param, final Promise promise) {
         AsyncTask.execute(new Runnable() {
             @Override
             public void run() {
@@ -225,7 +225,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     @ReactMethod
-    public void close(Promise promise) {
+    public void close(final Promise promise) {
         try {
             if (tag == null) {
                 throw new IOException("沒有抓到標籤");
