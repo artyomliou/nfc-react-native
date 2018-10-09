@@ -1,64 +1,29 @@
 # NfcReactNative
 
-nfc-react-native is a react-native module for android to write/read Mifare Classic (NFC) tags.
+nfc-react-native is a react-native module for android to write/read Mifare Classic (NFC) tags.  
+
+The difference between original repo and this one is:
+1. Async/await API
+2. Cancel all operations, if any one fails.
+3. Start a sequence of operations by **event**, not button
 
 ## Getting started
 
-`$ npm install nfc-react-native --save`
+`$ npm install bros0215/nfc-react-native --save`
 
 ### Mostly automatic installation
 
 `$ react-native link nfc-react-native`
 
-### Manual installation
-
-#### Android
-
-1. Open up `android/app/src/main/java/[...]/MainApplication.java`
-  - Add `import es.tiarg.nfcreactnative.NfcReactNativePackage;` to the imports at the top of the file
-  - Add `new NfcReactNativePackage()` to the list returned by the `getPackages()` method
-2. Append the following lines to `android/settings.gradle`:
-    ```
-    include ':nfc-react-native'
-    project(':nfc-react-native').projectDir = new File(rootProject.projectDir,  '../node_modules/nfc-react-native/android')
-    ```
-3. Insert the following lines inside the dependencies block in `android/app/build.gradle`:
-    ```
-      compile project(':nfc-react-native')
-    ```
-
 ## Usage
 ```javascript
-import { getTagId, readTag, writeTag } from 'nfc-react-native'
+import { setKey, read, writeByte } from 'nfc-react-native'
 
 ...
 export default class NfcSample extends Component {
-  readTagId() {
-    getTagId()
-  }
 
-  readTagData() {
-    readTag([
-      { sector: 1, blocks: [1,2], clave: 'FFFFFFFFFFFF', keyType: 'A' },
-      { sector: 2, blocks: [0,1,2], clave: 'FFFFFFFFFFFF', keyType: 'A' },
-      { sector: 3, blocks: [0], clave: 'FFFFFFFFFFFF', keyType: 'A' }
-    ])
-  }
-
-  writeTagData() {
-    writeTag([{ sector: 1, blocks: [ 
-    { index: 1, data: [15,15,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,15,15] },
-    { index: 2, data: [15,15,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,15,15] } ],
-      clave: 'FFFFFFFFFFFF', keyType: 'A' },
-      { sector: 2, blocks: [ 
-    { index: 0, data: [15,15,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,15,15] },
-    { index: 1, data: [15,15,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,15,15] },
-    { index: 2, data: [15,15,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,15,15] } ],
-      clave: 'FFFFFFFFFFFF', keyType: 'A' },
-    { sector: 3, blocks: [ 
-    { index: 0, data: [15,15,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,15,15] } ],
-      clave: 'FFFFFFFFFFFF', keyType: 'A' },
-      ], 1148002313)
+  setAuthKey(key, type) {
+    setKey(key, type);
   }
 
   componentDidMount() {
@@ -67,19 +32,24 @@ export default class NfcSample extends Component {
         Alert.alert(JSON.stringify(e))
     })
 
-    DeviceEventEmitter.addListener('onTagDetected', function (e) {
-        Alert.alert(JSON.stringify(e))
-    })
+    DeviceEventEmitter.addListener('onTagDetected', async function (event) {
+      console.log('detected', event);
 
-    DeviceEventEmitter.addListener('onTagRead', (e) => {
-        console.log('reading', e)
-        Alert.alert(JSON.stringify(e))
-    })
-
-    DeviceEventEmitter.addListener('onTagWrite', (e) => {
-        console.log('writing', e)
-        Alert.alert(JSON.stringify(e))
-    })
+      try {
+        for (let block = 0; block < 4; block++) {
+          let sector = 1;
+          let response = await read({ sector, block });
+          console.log(response.payload);
+        }
+        for (let byte = 0; byte < 6; byte++) {
+          let sector = 1;
+          let block = 1;
+          console.log(await writeByte({ sector, block, byte, data: '1' }));
+        }
+      } catch (error) {
+        console.log('error', error);
+      }
+    });
   }
 
   render() {
@@ -88,18 +58,6 @@ export default class NfcSample extends Component {
         <Text style={styles.welcome}>
           Welcome to React Native!
         </Text>
-        <Button
-          onPress={this.readTagId}
-          title="Get id of Tag"
-        />
-        <Button
-          onPress={this.readTagData}
-          title="Get sectors of a Tag"
-        />
-        <Button
-          onPress={this.writeTagData}
-          title="Write sectors of a Tag"
-        />
       </View>
     );
   }

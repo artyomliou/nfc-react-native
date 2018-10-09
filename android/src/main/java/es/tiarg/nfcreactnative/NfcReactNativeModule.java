@@ -2,14 +2,10 @@ package es.tiarg.nfcreactnative;
 import com.facebook.react.bridge.ActivityEventListener;
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.WritableMap;
-import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.ReadableMap;
-import com.facebook.react.bridge.ReadableArray;
-import com.facebook.react.bridge.ReadableNativeArray;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
@@ -17,31 +13,22 @@ import com.facebook.react.modules.core.DeviceEventManagerModule;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Intent;
-import android.content.IntentFilter;
+import android.nfc.TagLostException;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.tech.MifareClassic;
-import android.nfc.tech.Ndef;
-import android.os.Bundle;
 import android.util.Log;
+import android.os.AsyncTask;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
+import java.lang.Exception;
+import java.io.UnsupportedEncodingException;
+import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.Collections;
+import java.util.ArrayList;
 
-import static android.R.attr.action;
-import static android.R.attr.data;
-import static android.R.attr.defaultValue;
-import static android.R.attr.id;
-import static android.R.attr.tag;
-import static android.R.attr.x;
-import static android.content.ContentValues.TAG;
-import static android.view.View.X;
 import static com.facebook.common.util.Hex.hexStringToByteArray;
 
 
@@ -49,140 +36,25 @@ import static com.facebook.common.util.Hex.hexStringToByteArray;
 class NfcReactNativeModule extends ReactContextBaseJavaModule implements ActivityEventListener, LifecycleEventListener {
     private ReactApplicationContext reactContext;
 
-    private boolean readOperation;
-    private boolean writeOperation;
-    private int tagId;
+    private static final String E_LAYOUT_ERROR = "E_LAYOUT_ERROR";
 
-    private ReadableArray sectores;
     private NfcAdapter mNfcAdapter;
-    private MifareClassic tag;
 
+    private volatile int tagId;
+    private volatile MifareClassic tag;
 
-    private class ThreadLectura implements Runnable {
-        public void run() {
-            if (tag != null && (readOperation || writeOperation)) {
-                try {
-                    tag.connect();
-
-                    WritableMap readData = Arguments.createMap();
-                    WritableArray writeData = Arguments.createArray();
-                    WritableArray readDataSectors = Arguments.createArray();
-                    readData.putInt("tagId", id);
-
-                    for (int i = 0; i < sectores.size(); i++) {
-                        ReadableMap sector = sectores.getMap(i);
-                        int sectorIndex = sector.getInt("sector");
-                        byte[] claveBytes = hexStringToByteArray(sector.getString("clave"));
-                        boolean authResult;
-
-                        if (sector.getString("keyType").equals("A")) {
-                            authResult = tag.authenticateSectorWithKeyA(sectorIndex, claveBytes);
-                        } else {
-                            authResult = tag.authenticateSectorWithKeyB(sectorIndex, claveBytes);
-                        }
-
-                        if (!authResult) {
-                            writeOperation = false;
-                            readOperation = false;
-                            throw new Exception("Auth Error: failed at sector " + sectorIndex);
-                        }
-                    }
-
-                    for (int i = 0; i < sectores.size(); i++) {
-                        // if (tagId != 0 && writeOperation && tagId != id) {
-                        //     WritableMap error = Arguments.createMap();
-                        //     error.putString("error", "Tag id doesn't match");
-
-                        //     reactContext
-                        //             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                        //             .emit("onTagError", error);
-
-                        //     writeOperation = false;
-                        //     tag.close();
-                        //     return;
-                        // }
-
-
-                        WritableMap dataSector = Arguments.createMap();
-                        WritableArray blocksXSector = Arguments.createArray();
-                            
-                        if (readOperation) {
-                            for (int j = 0; j < sectores.getMap(i).getArray("blocks").size(); j++) 
-                            {
-                                int iBloque = sectores.getMap(i).getArray("blocks").getInt(j);
-                                byte[] blockData = tag.readBlock(4 * sectores.getMap(i).getInt("sector") + iBloque);
-                                blocksXSector.pushArray(Arguments.fromArray(arrayBytesToArrayInts(blockData)));
-                            }
-
-                            dataSector.putArray("blocks", blocksXSector);
-                            dataSector.putInt("sector", sectores.getMap(i).getInt("sector"));
-
-                            readDataSectors.pushMap(dataSector);
-                        }
-                            
-                        if (writeOperation) {
-                            for (int k = 0; k < sectores.getMap(i).getArray("blocks").size(); k++) {
-                                ReadableMap rmBloque = sectores.getMap(i).getArray("blocks").getMap(k);
-
-                                ReadableNativeArray data = (ReadableNativeArray)rmBloque.getArray("data");
-
-                                int[] writeDataA = new int[data.size()];
-                                for(int l = 0; l < data.size(); l++)
-                                        writeDataA[l] = data.getInt(l);
-
-                                int blockIndex = 4 * sectores.getMap(i).getInt("sector") + rmBloque.getInt("index");
-                                tag.writeBlock(blockIndex, arrayIntsToArrayBytes(writeDataA));
-
-                                blocksXSector.pushMap(Arguments.createMap());
-                            }
-                            dataSector.putArray("blocks", blocksXSector);
-                            dataSector.putInt("sector", sectores.getMap(i).getInt("sector"));
-                            writeData.pushMap(dataSector);
-                        }
-                    }
-                    tag.close();
-
-
-                    readData.putArray("lectura",readDataSectors);
-                    if (readOperation) {
-                        reactContext
-                                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                .emit("onTagRead", readData);
-                        readOperation = false;
-                    }
-
-                    if (writeOperation){
-                        reactContext
-                                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                                .emit("onTagWrite", writeData);
-                        writeOperation = false;
-                    }
-
-                } catch (Exception ex) {
-                    WritableMap error = Arguments.createMap();
-                    error.putString("error", ex.toString());
-
-                    reactContext
-                            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-                            .emit("onTagError", error);
-                }
-            }
-        }
-    }
+    private volatile String authKey = "FFFFFFFFFFFF";
+    private volatile String authType = "B";
+    private volatile ArrayList<Boolean> authStatuses;
 
     public NfcReactNativeModule(ReactApplicationContext reactContext) {
         super(reactContext);
         this.reactContext = reactContext;
-        this.tag = null;
 
-        this.reactContext.addActivityEventListener(this);
-        this.reactContext.addLifecycleEventListener(this);
+        tag = null;
 
-        ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
-        exec.scheduleAtFixedRate(new ThreadLectura(), 0, 1, TimeUnit.SECONDS);
-
-        this.readOperation = false;
-        this.writeOperation = false;
+        reactContext.addActivityEventListener(this);
+        reactContext.addLifecycleEventListener(this);
     }
 
     @Override
@@ -190,7 +62,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         if (mNfcAdapter != null) {
             setupForegroundDispatch(getCurrentActivity(), mNfcAdapter);
         } else {
-            mNfcAdapter = NfcAdapter.getDefaultAdapter(this.reactContext);
+            mNfcAdapter = NfcAdapter.getDefaultAdapter(reactContext);
         }
     }
 
@@ -205,12 +77,35 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         // Activity `onDestroy`
     }
 
-    private void handleIntent(Intent intent) {
-        this.tag = MifareClassic.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
-        this.tagId = ByteBuffer.wrap(this.tag.getTag().getId()).getInt();
+    @Override
+    public void onActivityResult(
+            final Activity activity,
+            final int requestCode,
+            final int resultCode,
+            final Intent intent) {
+    }
 
+    @Override
+    public void onNewIntent(Intent intent) {
+        handleIntent(intent);
+    }
+
+    private void handleIntent(Intent intent) {
+        Log.d("ReactNative", "handleIntent");
+        tag = MifareClassic.get( (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG));
+        tagId = ByteBuffer.wrap(tag.getTag().getId()).getInt();
+
+        // reset variables for further operation
+        int sectorCount = tag.getSectorCount();
+        resetTagInfos(sectorCount);
+
+        // pass info about this tag to JS
         WritableMap map = Arguments.createMap();
-        map.putInt("id", this.tagId);
+        map.putInt("id", tagId);
+        map.putInt("size", tag.getSize());
+        map.putInt("timeout", tag.getTimeout());
+        map.putInt("type", tag.getType());
+
         reactContext
             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
             .emit("onTagDetected", map);
@@ -228,18 +123,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         adapter.disableForegroundDispatch(activity);
     }
 
-    @Override
-    public void onNewIntent(Intent intent) {
-        handleIntent(intent);
-    }
-
-    @Override
-    public void onActivityResult(
-            final Activity activity,
-            final int requestCode,
-            final int resultCode,
-            final Intent intent) {
-    }
     /**
      * @return the name of this module. This will be the name used to {@code require()} this module
      * from javascript.
@@ -250,17 +133,209 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     @ReactMethod
-    public void readTag(ReadableArray sectores) {
-        this.sectores = sectores;
-        this.readOperation = true;
-        this.writeOperation = false;
+    public void setKey(final String newKey, final String newType) {
+        if (newKey == null || newType == null) {
+            return;
+        }
+        authKey = newKey;
+        authType = newType;
     }
 
     @ReactMethod
-    public void writeTag(ReadableArray sectores) {
-        this.sectores = sectores;
-        this.writeOperation = true;
-        this.readOperation = false;
+    public void read(final ReadableMap param, final Promise promise) {
+        AsyncTask.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    connect();
+                } catch (IOException e) {
+                    Log.d("ReactNative", e.getMessage());
+                    promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
+                    return;
+                }
+                try {
+                    int sectorIndex = param.getInt("sector");
+                    int blockIndex = param.getInt("block");
+
+                    blockIndex = getRealBlockIndex(sectorIndex, blockIndex);
+                    Log.d("ReactNative", String.valueOf(sectorIndex) + "," + String.valueOf(blockIndex));
+                    auth(sectorIndex);
+
+                    byte[] blockBytes = tag.readBlock(blockIndex);
+                    String blockString = byteArrayToHexString(blockBytes);
+
+                    WritableMap returns = Arguments.createMap();
+                    returns.putString("payload", blockString);
+                    promise.resolve(returns);
+
+                } catch (IOException e) {
+                    Log.d("ReactNative", e.getMessage());
+                    promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
+                } catch (Exception e) {
+                    Log.d("ReactNative", e.getMessage());
+                    promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
+                }
+            }
+        });
+    }
+
+    @ReactMethod
+    public void writeByte(final ReadableMap param, final Promise promise) {
+        AsyncTask.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    connect();
+                } catch (IOException e) {
+                    Log.d("ReactNative", e.getMessage());
+                    promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
+                    return;
+                }
+                try {
+                    int sectorIndex = param.getInt("sector");
+                    int blockIndex = param.getInt("block");
+                    int byteIndex = param.getInt("byte");
+                    String data = param.getString("data");
+
+                    blockIndex = getRealBlockIndex(sectorIndex, blockIndex);
+                    Log.d("ReactNative", String.valueOf(sectorIndex) + "," + String.valueOf(blockIndex));
+                    auth(sectorIndex);
+
+                    byte[] blockBytes = tag.readBlock(blockIndex);
+                    if (byteIndex > blockBytes.length - 1) {
+                        throw new Exception("Out of bound: invalid byte index to wrtie");
+                    } else {
+                        blockBytes = overwriteBytesWithString(blockBytes, byteIndex, data);
+                        tag.writeBlock(blockIndex, blockBytes);
+                    }
+
+                    WritableMap returns = Arguments.createMap();
+                    returns.putString("payload", byteArrayToHexString(blockBytes));
+                    promise.resolve(returns);
+
+                } catch (IOException e) {
+                    Log.d("ReactNative", e.getMessage());
+                    promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
+                } catch (Exception e) {
+                    Log.d("ReactNative", e.getMessage());
+                    promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
+                }
+            }
+        });
+    }
+
+    @ReactMethod
+    public void close(final Promise promise) {
+        try {
+            if (tag == null) {
+                throw new IOException("沒有抓到標籤");
+            }
+            if (tag.isConnected()) {
+                tag.close();
+            }
+            WritableMap returns = Arguments.createMap();
+            returns.putBoolean("payload", true);
+            promise.resolve(returns);
+        } catch (IOException e) {
+            Log.d("ReactNative", e.getMessage());
+            promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
+        }
+    }
+
+    private void connect() throws IOException {
+        if (tag == null) {
+            throw new IOException("沒有抓到標籤");
+        }
+        if (tag.isConnected() == false) {
+            tag.connect();
+        }
+    }
+
+    private void auth(int sectorIndex) throws Exception {
+        if (authStatuses.get(sectorIndex) == true) {
+            return;
+        }
+        boolean passed = false;
+        byte[][] arrayKeys = new byte[5][6];
+        arrayKeys[0] = hexStringToByteArray(authKey);
+        arrayKeys[1] = arrayKeys[0];
+        arrayKeys[2] = MifareClassic.KEY_DEFAULT;
+        arrayKeys[3] = MifareClassic.KEY_MIFARE_APPLICATION_DIRECTORY;
+        arrayKeys[4] = MifareClassic.KEY_NFC_FORUM;
+
+        String[] arrayTypes = new String[5];
+        arrayTypes[0] = authType;
+        arrayTypes[1] = "A".equals(authType) ? "B" : "A";
+        arrayTypes[2] = "A";
+        arrayTypes[3] = "A";
+        arrayTypes[4] = "A";
+
+        for (int i = 0; i < arrayKeys.length; i++) {
+            try {
+                if ("A".equals(arrayTypes[i])) {
+                    passed = tag.authenticateSectorWithKeyA(sectorIndex, arrayKeys[i]);
+                } else {
+                    passed = tag.authenticateSectorWithKeyB(sectorIndex, arrayKeys[i]);
+                }
+            } catch (TagLostException e) {
+                throw e;
+            } catch (IOException e) {
+                Log.d("ReactNative", e.getMessage());
+            }
+            
+            if (passed) {
+                Log.d("ReactNative", "Sector " + String.valueOf(sectorIndex) + ", " + byteArrayToHexString(arrayKeys[i]));
+                break;
+            }
+        }
+        authStatuses.set(sectorIndex, passed);
+
+        if (passed == false) {
+            throw new IOException("Authentication failed: sector" + String.valueOf(sectorIndex) + ", type" + authType + ", key=" + authKey);
+        }
+    }
+
+    /**
+     * When you want to access block 7 in sector 2
+     * (which usually means the last block in sector)
+     * You'll probably get blockIndex as 7 or 3.
+     * 
+     * When you get blockIndex as 3, 
+     * you have to calculate the real blockIndex which Android API needs.
+     * 
+     * This function is designed to fix this.
+     */
+    private int getRealBlockIndex(int sectorIndex, int blockIndex) throws Exception {
+        int firstBlockInSector = tag.sectorToBlock(sectorIndex);
+        int blockCounts = tag.getBlockCountInSector(sectorIndex);
+        int lastBlockInSector = firstBlockInSector + blockCounts - 1;
+
+        if (firstBlockInSector <= blockIndex && blockIndex <= lastBlockInSector) {
+            // blockCounts = 4, sector = 3, block = 9
+            return blockIndex;
+        } else if (0 <= blockIndex && blockIndex <= blockCounts - 1) {
+            // blockCounts = 4, sector = 3, block = 0
+            return firstBlockInSector + blockIndex - 1;
+        } else {
+            throw new Exception(
+                "Out of bound: sector " + String.valueOf(sectorIndex) + ", block " + String.valueOf(blockIndex)
+            );
+        }
+    }
+
+    private byte[] overwriteBytesWithString(byte[] blockBytes, int byteIndex, String data)
+            throws UnsupportedEncodingException {
+        byte[] bytes = data.getBytes("UTF-8");
+        for (byte b : bytes) {
+            blockBytes[byteIndex] = b;
+            byteIndex++;
+        }
+        return blockBytes;
+    }
+
+    private void resetTagInfos(int sectorCount) {
+        Log.d("ReactNative", "resetTagInfos");
+        authStatuses = new ArrayList<Boolean>(Collections.nCopies(sectorCount, false));
     }
 
     private static byte[] hexStringToByteArray(String s) {
