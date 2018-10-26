@@ -29,8 +29,6 @@ import java.nio.IntBuffer;
 import java.util.Collections;
 import java.util.ArrayList;
 
-import static com.facebook.common.util.Hex.hexStringToByteArray;
-
 
 
 class NfcReactNativeModule extends ReactContextBaseJavaModule implements ActivityEventListener, LifecycleEventListener {
