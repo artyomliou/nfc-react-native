@@ -28,7 +28,8 @@ import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.util.Collections;
 import java.util.ArrayList;
-import java.util.Arrays;
+
+import static com.facebook.common.util.Hex.hexStringToByteArray;
 
 
 
@@ -161,7 +162,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     auth(sectorIndex);
 
                     byte[] blockBytes = tag.readBlock(blockIndex);
-                    String blockString = Arrays.toString(arrayBytesToArrayInts(blockBytes));
+                    String blockString = byteArrayToHexString(blockBytes);
 
                     WritableMap returns = Arguments.createMap();
                     returns.putString("payload", blockString);
@@ -209,7 +210,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     }
 
                     WritableMap returns = Arguments.createMap();
-                    returns.putString("payload", Arrays.toString(arrayBytesToArrayInts(blockBytes)));
+                    returns.putString("payload", byteArrayToHexString(blockBytes));
                     promise.resolve(returns);
 
                 } catch (IOException e) {
