@@ -89,7 +89,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     private void handleIntent(Intent intent) {
-        Log.d("ReactNative", "handleIntent");
+        Log.d("NfcReactNative", "handleIntent");
         Tag tagFromIntent = (Tag)intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
         if (tag == null) {
             return;
@@ -152,7 +152,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 try {
                     connect();
                 } catch (IOException e) {
-                    Log.d("ReactNative", e.getMessage());
+                    Log.d("NfcReactNative", e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                     return;
                 }
@@ -161,7 +161,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     int blockIndex = param.getInt("block");
 
                     blockIndex = getRealBlockIndex(sectorIndex, blockIndex);
-                    Log.d("ReactNative", String.valueOf(sectorIndex) + "," + String.valueOf(blockIndex));
+                    Log.d("NfcReactNative", String.valueOf(sectorIndex) + "," + String.valueOf(blockIndex));
                     auth(sectorIndex);
 
                     byte[] blockBytes = tag.readBlock(blockIndex);
@@ -172,10 +172,10 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     promise.resolve(returns);
 
                 } catch (IOException e) {
-                    Log.d("ReactNative", e.getMessage());
+                    Log.d("NfcReactNative", e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                 } catch (Exception e) {
-                    Log.d("ReactNative", e.getMessage());
+                    Log.d("NfcReactNative", e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                 }
             }
@@ -190,7 +190,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 try {
                     connect();
                 } catch (IOException e) {
-                    Log.d("ReactNative", e.getMessage());
+                    Log.d("NfcReactNative", e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                     return;
                 }
@@ -201,7 +201,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     String data = param.getString("data");
 
                     blockIndex = getRealBlockIndex(sectorIndex, blockIndex);
-                    Log.d("ReactNative", String.valueOf(sectorIndex) + "," + String.valueOf(blockIndex));
+                    Log.d("NfcReactNative", String.valueOf(sectorIndex) + "," + String.valueOf(blockIndex));
                     auth(sectorIndex);
 
                     byte[] blockBytes = tag.readBlock(blockIndex);
@@ -217,10 +217,10 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     promise.resolve(returns);
 
                 } catch (IOException e) {
-                    Log.d("ReactNative", e.getMessage());
+                    Log.d("NfcReactNative", e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                 } catch (Exception e) {
-                    Log.d("ReactNative", e.getMessage());
+                    Log.d("NfcReactNative", e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                 }
             }
@@ -231,7 +231,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     public void close(final Promise promise) {
         try {
             if (tag == null) {
-                throw new IOException("沒有抓到標籤");
+                throw new IOException("Lost tag. Cant close connection.");
             }
             if (tag.isConnected()) {
                 tag.close();
@@ -240,14 +240,14 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             returns.putBoolean("payload", true);
             promise.resolve(returns);
         } catch (IOException e) {
-            Log.d("ReactNative", e.getMessage());
+            Log.d("NfcReactNative", e.getMessage());
             promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
         }
     }
 
     private void connect() throws IOException {
         if (tag == null) {
-            throw new IOException("沒有抓到標籤");
+            throw new IOException("Lost tag. Cant start connection.");
         }
         if (tag.isConnected() == false) {
             tag.connect();
@@ -283,11 +283,10 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             } catch (TagLostException e) {
                 throw e;
             } catch (IOException e) {
-                Log.d("ReactNative", e.getMessage());
+                Log.d("NfcReactNative", e.getMessage());
             }
             
             if (passed) {
-                Log.d("ReactNative", "Sector " + String.valueOf(sectorIndex) + ", " + byteArrayToHexString(arrayKeys[i]));
                 break;
             }
         }
@@ -337,7 +336,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
     }
 
     private void resetTagInfos(int sectorCount) {
-        Log.d("ReactNative", "resetTagInfos");
+        Log.d("NfcReactNative", "resetTagInfos");
         authStatuses = new ArrayList<Boolean>(Collections.nCopies(sectorCount, false));
     }
 
