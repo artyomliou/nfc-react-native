@@ -153,7 +153,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 try {
                     connect();
                 } catch (IOException e) {
-                    Log.d("NfcReactNative", e.getMessage());
+                    Log.d("NfcReactNative", "" + e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                     return;
                 }
@@ -173,10 +173,10 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     promise.resolve(returns);
 
                 } catch (IOException e) {
-                    Log.d("NfcReactNative", e.getMessage());
+                    Log.d("NfcReactNative", "" + e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                 } catch (Exception e) {
-                    Log.d("NfcReactNative", e.getMessage());
+                    Log.d("NfcReactNative", "" + e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                 }
             }
@@ -191,7 +191,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                 try {
                     connect();
                 } catch (IOException e) {
-                    Log.d("NfcReactNative", e.getMessage());
+                    Log.d("NfcReactNative", "" + e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                     return;
                 }
@@ -218,10 +218,10 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
                     promise.resolve(returns);
 
                 } catch (IOException e) {
-                    Log.d("NfcReactNative", e.getMessage());
+                    Log.d("NfcReactNative", "" + e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                 } catch (Exception e) {
-                    Log.d("NfcReactNative", e.getMessage());
+                    Log.d("NfcReactNative", "" + e.getMessage());
                     promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
                 }
             }
@@ -241,7 +241,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             returns.putBoolean("payload", true);
             promise.resolve(returns);
         } catch (IOException e) {
-            Log.d("NfcReactNative", e.getMessage());
+            Log.d("NfcReactNative", "" + e.getMessage());
             promise.reject(E_LAYOUT_ERROR, Log.getStackTraceString(e));
         }
     }
@@ -284,7 +284,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             } catch (TagLostException e) {
                 throw e;
             } catch (IOException e) {
-                Log.d("NfcReactNative", e.getMessage());
+                Log.d("NfcReactNative", "" + e.getMessage());
             }
             
             if (passed) {
