@@ -75,7 +75,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         // Activity `onDestroy`
     }
 
-    @Override
     public void onActivityResult(
             final Activity activity,
             final int requestCode,
@@ -83,7 +82,6 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
             final Intent intent) {
     }
 
-    @Override
     public void onNewIntent(Intent intent) {
         handleIntent(intent);
     }
