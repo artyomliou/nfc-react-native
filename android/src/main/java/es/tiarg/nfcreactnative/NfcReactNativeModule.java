@@ -292,7 +292,7 @@ class NfcReactNativeModule extends ReactContextBaseJavaModule implements Activit
         authStatuses.set(sectorIndex, passed);
 
         if (passed == false) {
-            throw new IOException("Authentication failed: sector" + String.valueOf(sectorIndex) + ", type" + authType + ", key=" + authKey);
+            throw new IOException("Authentication failed: sector" + String.valueOf(sectorIndex));
         }
     }
 
